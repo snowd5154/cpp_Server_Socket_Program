@@ -1,0 +1,295 @@
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+
+using namespace std;
+
+//this struct will hold the careers(majors) and their corresponding pays
+struct careers
+{
+    string major;
+    string earlyCareerPay;
+    string midCareerPay;
+};
+
+//this will sort the vector that hold the careers alphabetically
+bool sortCareersAlphabetically(const careers &a, const careers &b)
+{
+    return a.major < b.major;
+    
+}
+
+string findMajorAndReturnSalary(string majorToFind, vector<careers> vecOfCareers);
+
+int main() {
+    
+    string fileName;
+    
+    cout << "Enter the file name: ";
+    cin >> fileName;
+    
+    ifstream inStream;
+    
+    //ifstream inStream(fileName);
+    
+    bool fileExists = false;
+    
+    while(fileExists == false)
+    {
+        ifstream tempo(fileName);
+        
+        if(!tempo)
+        {
+            cout << "file doesn't exist, try again: ";
+            cin >> fileName;
+            continue;
+        }
+        else
+        {
+            tempo.close();
+            break;
+        }
+        
+    }
+    
+    string temp = "";
+    
+    vector<careers> holdsAllMajors;
+    int counter = 0;  //will help us in iterating through the vector
+    
+    inStream.open(fileName);
+    //STILL NEED TO ADD CONDITION IN CASE THE FILE DOESNT EXIST
+    
+    while(!inStream.eof())
+    {
+        getline(inStream, temp);  //we get parse through the file line by line
+        
+        careers currentCareer;
+        
+        holdsAllMajors.push_back(currentCareer);
+        
+        char currChar;
+        int charPosition = 0;
+        string thisMajor = "";
+        for(int i = 0; i < temp.size(); i++)
+        {
+            currChar = temp[i];
+            
+            
+            if(currChar == 9)  //if we get to a tab
+            {
+                charPosition++;
+                break;
+                
+            }
+            
+            thisMajor = thisMajor + currChar;
+            
+            
+            charPosition++;
+        }
+        
+        
+        holdsAllMajors[counter].major = thisMajor;
+        
+        string earlyPay = "";
+        
+        for(int i = charPosition; i < temp.size(); i++)
+        {
+            currChar = temp[i];
+        
+            if(currChar == 9)
+            {
+                charPosition++;
+                break;
+            }
+            
+            earlyPay = earlyPay + currChar;
+            charPosition++;
+
+        }
+        
+        holdsAllMajors[counter].earlyCareerPay = earlyPay;
+        
+        string midPay = "";
+        
+        for(int i = charPosition; i < temp.size(); i++)
+        {
+            currChar = temp[i];
+            
+            if(currChar == 9)
+            {
+                charPosition++;
+                break;
+                
+            }
+            
+            midPay = midPay + currChar;
+            charPosition++;
+            
+        }
+        
+        holdsAllMajors[counter].midCareerPay = midPay;
+       
+        counter++;
+    }
+   
+    //our vector is now sorted alphabetically
+    //sort(holdsAllMajors.begin(), holdsAllMajors.end(), sortCareersAlphabetically);
+
+    int serverPortNumber;
+    
+    cout << "Enter server port: ";
+    
+    cin >> serverPortNumber;
+    
+    int sockfd, newsockfd, clientAddressLen, n;
+    char buffer[256];  //server reads characters from socket connection into this buffer
+    struct sockaddr_in serverAddress, clientAddress;
+    
+    //here we create the socket. AF_INET is IPv4 protocol, SOCK_STREAM states use a TCP
+    //connection, and 0 is for Internet Protocol, IP
+    if ( (sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+    {
+        perror("socket failed");
+        exit(EXIT_FAILURE);
+        
+    }
+    
+    //sets all values in buffer to zero
+    bzero((char *) &serverAddress, sizeof(serverAddress));
+
+    char hostName[8];
+    string tempo = "localhost";
+    
+    for(int i = 0; i < tempo.size(); i++)
+    {
+        hostName[i] = tempo[i];
+    }
+    
+    struct hostent *h;
+    h = gethostbyname(hostName);
+    
+    serverAddress.sin_family = h->h_addrtype;
+    //serverAddress.sin_family = AF_INET;
+    serverAddress.sin_port = htons(serverPortNumber);
+    //serverAddress.sin_addr.s_addr = INADDR_ANY;
+    
+    if (::bind(sockfd, (struct sockaddr *) &serverAddress, sizeof(serverAddress)) < 0)
+    {
+        perror("bind failed");
+        exit(EXIT_FAILURE);
+    }
+    
+    bool serverOpen = true;  //we dont have to close the server for this assignment
+    
+    listen(sockfd, 5);
+
+//    clientAddressLen = sizeof(clientAddress);
+
+    while(serverOpen)
+    {
+//        listen(sockfd, 5);
+        
+        clientAddressLen = sizeof(clientAddress);
+        newsockfd = accept(sockfd, (struct sockaddr *) &clientAddress, (socklen_t*)&clientAddressLen);
+        if(newsockfd < 0)
+        {
+            cout << "ERROR accepting the connection" << endl;
+            exit(EXIT_FAILURE);
+        }
+        bzero(buffer, 256);
+        n = read(newsockfd, buffer, 255);
+        if(n < 0)
+        {
+            cout << "ERROR reading from socket" << endl;
+            exit(EXIT_FAILURE);
+        }
+        
+        //printf("The major he wants is %s\n", buffer);
+        
+        string majorInBuffer(buffer);   //this converts the value in buffer to a string
+ 
+        string result = findMajorAndReturnSalary(majorInBuffer, holdsAllMajors);
+        
+        if(result == "Not Found")
+        {
+            n = write(newsockfd, "-1 -1", 5);
+            if(n < 0)
+            {
+                cout << "ERROR writing to socket";
+            }
+
+        }
+        else
+        {
+            
+            //convert string result to char arry
+            strcpy(buffer, result.c_str());
+            
+            n = write(newsockfd, buffer, result.size());
+            if(n < 0)
+            {
+                cout << "ERROR writing to socket";
+            }
+            
+        }
+        
+        //might have to do something here
+        //fgets(buffer, 255, stdin);
+        
+        //n = write(newsockfd, buffer, strlen(buffer));
+//        n = write(newsockfd, result, result.size());
+//        if(n < 0)
+//        {
+//            cout << "ERROR writing to socket";
+//        }
+   
+    }
+
+    return 0;
+}
+
+string findMajorAndReturnSalary(string majorToFind, vector<careers> vecOfCareers)
+{
+    string bothPays;
+    bool foundMajor = false;
+    
+    
+    for(int i = 0; i < vecOfCareers.size(); i++)
+    {
+        string currMajor = vecOfCareers[i].major;
+        
+        if(currMajor.compare(majorToFind) == 0)  //if the major we are looking for is here
+        {
+            string earlyAvgPay = vecOfCareers[i].earlyCareerPay;
+            string midAvgPay = vecOfCareers[i].midCareerPay;
+            
+            bothPays = earlyAvgPay + " " + midAvgPay;
+            
+            //cout << bothPays << " together " << bothPays.size() << endl;
+            foundMajor = true;
+            
+            break;
+            
+        }
+        
+    }
+    
+    if(foundMajor == true)
+    {
+        return bothPays;
+    }
+    else   //if we didn't find major
+    {
+        return "Not Found";
+    }    
+}
